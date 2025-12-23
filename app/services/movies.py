@@ -68,18 +68,27 @@ def list_movies(
     db: Session,
     page: int,
     page_size: int,
+    title: Optional[str] = None,
+    release_year: Optional[int] = None,
+    genre: Optional[str] = None,
 ) -> PaginatedMovies:
     """
-    List movies with pagination.
+    List movies with pagination and optional filters.
 
-    For now this service only handles pagination.
-    Filtering by title / release_year / genre will be added
-    in a next step when wiring up the controller with query params.
+    Filters:
+    - title: partial, case-insensitive match on movie title
+    - release_year: exact match on release year
+    - genre: partial, case-insensitive match on genre name
+
+    If multiple filters are provided, they are combined with AND logic.
     """
     movies, total_items = repo_get_movies(
         db=db,
         page=page,
         page_size=page_size,
+        title=title,
+        release_year=release_year,
+        genre=genre,
     )
 
     items = [_movie_to_list_item(movie) for movie in movies]
