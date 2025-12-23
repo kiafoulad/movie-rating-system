@@ -2,20 +2,29 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.repositories.movies import get_movies as repo_get_movies
-from app.schemas.movies import PaginatedMovies, MovieListItem, DirectorInMovie
 from app.models.models import Movie
+from app.repositories.movies import (
+    get_movies as repo_get_movies,
+    get_movie_by_id as repo_get_movie_by_id,
+)
+from app.schemas.movies import (
+    DirectorInMovie,
+    MovieDetail,
+    MovieListItem,
+    PaginatedMovies,
+)
 
 
 def _compute_average_rating(movie: Movie) -> Optional[float]:
     """
     Compute the average rating of a movie based on its ratings.
-    Returns None if there are no ratings.
+
+    Returns None if the movie has no ratings.
     """
     if not movie.ratings:
         return None
 
-    total = sum(r.score for r in movie.ratings)
+    total = sum(rating.score for rating in movie.ratings)
     count = len(movie.ratings)
     return round(total / count, 1)
 
@@ -27,29 +36,34 @@ def _compute_ratings_count(movie: Movie) -> int:
     return len(movie.ratings)
 
 
-def _movie_to_list_item(movie: Movie) -> MovieListItem:
+def _build_director_schema(movie: Movie) -> DirectorInMovie:
     """
-    Map a Movie ORM object to a MovieListItem schema.
+    Build a DirectorInMovie schema for the given movie.
+
+    Falls back to an 'Unknown' director if the relation is missing.
     """
     if movie.director is None:
-        # This should not normally happen if data integrity is correct,
-        # but we guard against it for safety.
-        director_schema = DirectorInMovie(
+        return DirectorInMovie(
             id=0,
             name="Unknown",
             birth_year=None,
             description=None,
         )
-    else:
-        director_schema = DirectorInMovie(
-            id=movie.director.id,
-            name=movie.director.name,
-            birth_year=movie.director.birth_year,
-            description=movie.director.description,
-        )
 
+    return DirectorInMovie(
+        id=movie.director.id,
+        name=movie.director.name,
+        birth_year=movie.director.birth_year,
+        description=movie.director.description,
+    )
+
+
+def _movie_to_list_item(movie: Movie) -> MovieListItem:
+    """
+    Map a Movie ORM object to a MovieListItem schema.
+    """
+    director_schema = _build_director_schema(movie)
     genre_names = [genre.name for genre in movie.genres]
-
     average_rating = _compute_average_rating(movie)
     ratings_count = _compute_ratings_count(movie)
 
@@ -61,6 +75,19 @@ def _movie_to_list_item(movie: Movie) -> MovieListItem:
         genres=genre_names,
         average_rating=average_rating,
         ratings_count=ratings_count,
+    )
+
+
+def _movie_to_detail(movie: Movie) -> MovieDetail:
+    """
+    Map a Movie ORM object to a MovieDetail schema.
+    """
+    list_item = _movie_to_list_item(movie)
+
+    # Reuse list representation and extend it with the cast field
+    return MovieDetail(
+        **list_item.model_dump(),
+        cast=movie.cast,
     )
 
 
@@ -91,13 +118,13 @@ def list_movies(
         genre=genre,
     )
 
-    items = [_movie_to_list_item(movie) for movie in movies]
-
-    # Basic normalization of page & page_size, in sync with repository behavior
+    # Normalize page and page_size to safe defaults
     if page < 1:
         page = 1
     if page_size <= 0:
         page_size = 10
+
+    items = [_movie_to_list_item(movie) for movie in movies]
 
     return PaginatedMovies(
         page=page,
@@ -105,3 +132,21 @@ def list_movies(
         total_items=total_items,
         items=items,
     )
+
+
+def get_movie_detail(
+    db: Session,
+    movie_id: int,
+) -> Optional[MovieDetail]:
+    """
+    Get detailed information about a single movie by its ID.
+
+    Returns:
+        - MovieDetail if the movie exists.
+        - None if the movie does not exist.
+    """
+    movie = repo_get_movie_by_id(db=db, movie_id=movie_id)
+    if movie is None:
+        return None
+
+    return _movie_to_detail(movie)
