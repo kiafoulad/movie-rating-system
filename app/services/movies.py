@@ -10,6 +10,7 @@ from app.repositories.movies import (
     get_genres_by_ids as repo_get_genres_by_ids,
     get_movie_by_id as repo_get_movie_by_id,
     get_movies as repo_get_movies,
+    update_movie as repo_update_movie,
 )
 from app.schemas.movies import (
     DirectorInMovie,
@@ -17,6 +18,7 @@ from app.schemas.movies import (
     MovieDetail,
     MovieListItem,
     MovieRatingCreate,
+    MovieUpdate,
     PaginatedMovies,
 )
 
@@ -87,13 +89,24 @@ def _movie_to_list_item(movie: Movie) -> MovieListItem:
 def _movie_to_detail(movie: Movie) -> MovieDetail:
     """
     Map a Movie ORM object to a MovieDetail schema.
+
+    The 'updated_at' field is optional and will be filled only if the
+    Movie ORM model exposes such an attribute. Otherwise, it will be None.
     """
     list_item = _movie_to_list_item(movie)
 
-    # Reuse list representation and extend it with the cast field
+    updated_at_value: Optional[str] = None
+    # Some schemas/specs expect an 'updated_at' field. If the ORM model
+    # provides it, we convert it to string; otherwise we keep it as None.
+    if hasattr(movie, "updated_at"):
+        raw_value = getattr(movie, "updated_at")
+        if raw_value is not None:
+            updated_at_value = str(raw_value)
+
     return MovieDetail(
         **list_item.model_dump(),
         cast=movie.cast,
+        updated_at=updated_at_value,
     )
 
 
@@ -194,6 +207,47 @@ def create_movie(
     )
 
     return _movie_to_detail(movie)
+
+
+def update_movie(
+    db: Session,
+    movie_id: int,
+    movie_in: MovieUpdate,
+) -> MovieDetail:
+    """
+    Update an existing movie with the given data.
+
+    According to the spec:
+    - Only title, release_year, cast, and genres are updated.
+    - The director is not changed by this operation.
+
+    Raises:
+        ValueError: if the movie does not exist.
+        ValueError: if one or more genre IDs are invalid.
+    """
+    # Ensure the movie exists
+    movie = repo_get_movie_by_id(db=db, movie_id=movie_id)
+    if movie is None:
+        raise ValueError("Movie not found")
+
+    # Load genres and validate all IDs exist
+    genres = repo_get_genres_by_ids(
+        db=db,
+        genre_ids=movie_in.genres,
+    )
+    if len(genres) != len(set(movie_in.genres)):
+        raise ValueError("One or more genres not found")
+
+    updated_movie = repo_update_movie(
+        db=db,
+        movie=movie,
+        title=movie_in.title,
+        release_year=movie_in.release_year,
+        cast=movie_in.cast,
+        genres=genres,
+    )
+
+    return _movie_to_detail(updated_movie)
 
 
 def add_movie_rating(

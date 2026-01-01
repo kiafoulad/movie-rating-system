@@ -6,12 +6,18 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.schemas.common import APIResponse, ErrorDetail
-from app.schemas.movies import MovieCreate, MovieRatingCreate, PaginatedMovies
+from app.schemas.movies import (
+    MovieCreate,
+    MovieRatingCreate,
+    MovieUpdate,
+    PaginatedMovies,
+)
 from app.services.movies import (
     add_movie_rating as add_movie_rating_service,
     create_movie as create_movie_service,
     get_movie_detail as get_movie_detail_service,
     list_movies as list_movies_service,
+    update_movie as update_movie_service,
 )
 
 router = APIRouter(
@@ -110,6 +116,74 @@ def get_movie_detail_endpoint(
         )
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
+            content=api_response.model_dump(),
+        )
+
+    return APIResponse(
+        status="success",
+        data=movie_detail,
+    )
+
+
+@router.put(
+    "/{movie_id}",
+    response_model=APIResponse,
+    status_code=status.HTTP_200_OK,
+)
+def update_movie_endpoint(
+    movie_id: int,
+    movie_in: MovieUpdate,
+    db: Session = Depends(get_db),
+):
+    """
+    Update an existing movie by its ID.
+
+    According to the spec, this operation:
+    - Updates title, release_year, cast, and genres.
+    - Does NOT change the director.
+
+    On success:
+    - HTTP 200
+    - status: "success"
+    - data: MovieDetail
+
+    On failure:
+    - Movie not found:
+      - HTTP 404
+      - status: "failure"
+      - error: { code: 404, message: "Movie not found" }
+    - Invalid genres:
+      - HTTP 422
+      - status: "failure"
+      - error: { code: 422, message: "One or more genres not found" }
+    """
+    try:
+        movie_detail = update_movie_service(
+            db=db,
+            movie_id=movie_id,
+            movie_in=movie_in,
+        )
+    except ValueError as exc:
+        message = str(exc)
+
+        if message == "Movie not found":
+            status_code = status.HTTP_404_NOT_FOUND
+            error_code = status.HTTP_404_NOT_FOUND
+        else:
+            # All other ValueError cases are treated as invalid input
+            status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
+            error_code = status.HTTP_422_UNPROCESSABLE_ENTITY
+
+        api_response = APIResponse(
+            status="failure",
+            data=None,
+            error=ErrorDetail(
+                code=error_code,
+                message=message,
+            ),
+        )
+        return JSONResponse(
+            status_code=status_code,
             content=api_response.model_dump(),
         )
 

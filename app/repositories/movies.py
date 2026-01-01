@@ -140,6 +140,35 @@ def create_movie(
     return movie
 
 
+def update_movie(
+    db: Session,
+    movie: Movie,
+    *,
+    title: str,
+    release_year: Optional[int],
+    cast: Optional[str],
+    genres: List[Genre],
+) -> Movie:
+    """
+    Update an existing movie with the given data and persist changes.
+
+    This function assumes that:
+    - The movie instance already exists and is loaded from the database.
+    - The genres list contains fully loaded Genre objects that have already
+      been validated by the service layer.
+    """
+    movie.title = title
+    movie.release_year = release_year
+    movie.cast = cast
+    movie.genres = genres
+
+    db.add(movie)
+    db.commit()
+    db.refresh(movie)
+
+    return movie
+
+
 def create_movie_rating(
     db: Session,
     *,
