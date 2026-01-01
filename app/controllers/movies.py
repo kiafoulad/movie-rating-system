@@ -6,8 +6,9 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.schemas.common import APIResponse, ErrorDetail
-from app.schemas.movies import MovieCreate, PaginatedMovies
+from app.schemas.movies import MovieCreate, MovieRatingCreate, PaginatedMovies
 from app.services.movies import (
+    add_movie_rating as add_movie_rating_service,
     create_movie as create_movie_service,
     get_movie_detail as get_movie_detail_service,
     list_movies as list_movies_service,
@@ -157,6 +158,57 @@ def create_movie_endpoint(
         )
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content=api_response.model_dump(),
+        )
+
+    return APIResponse(
+        status="success",
+        data=movie_detail,
+    )
+
+
+@router.post(
+    "/{movie_id}/ratings",
+    response_model=APIResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def add_movie_rating_endpoint(
+    movie_id: int,
+    rating_in: MovieRatingCreate,
+    db: Session = Depends(get_db),
+):
+    """
+    Add a new rating to the given movie.
+
+    On success:
+    - HTTP 201
+    - status: "success"
+    - data: MovieDetail (with updated average_rating and ratings_count)
+
+    On failure (movie not found):
+    - HTTP 404
+    - status: "failure"
+    - data: null
+    - error: { code: 404, message: "Movie not found" }
+    """
+    try:
+        movie_detail = add_movie_rating_service(
+            db=db,
+            movie_id=movie_id,
+            rating_in=rating_in,
+        )
+    except ValueError as exc:
+        # Currently only "Movie not found" is expected.
+        api_response = APIResponse(
+            status="failure",
+            data=None,
+            error=ErrorDetail(
+                code=status.HTTP_404_NOT_FOUND,
+                message=str(exc),
+            ),
+        )
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
             content=api_response.model_dump(),
         )
 

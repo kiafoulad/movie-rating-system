@@ -2,7 +2,7 @@ from typing import List, Optional, Tuple
 
 from sqlalchemy.orm import Session, joinedload
 
-from app.models.models import Director, Genre, Movie
+from app.models.models import Director, Genre, Movie, MovieRating
 
 
 def get_movies(
@@ -138,3 +138,24 @@ def create_movie(
     db.refresh(movie)
 
     return movie
+
+
+def create_movie_rating(
+    db: Session,
+    *,
+    movie_id: int,
+    score: int,
+) -> MovieRating:
+    """
+    Create a new rating for the given movie.
+    """
+    rating = MovieRating(
+        movie_id=movie_id,
+        score=score,
+    )
+
+    db.add(rating)
+    db.commit()
+    db.refresh(rating)
+
+    return rating
