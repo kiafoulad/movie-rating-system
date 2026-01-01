@@ -48,9 +48,9 @@ def list_movies_endpoint(
         None,
         description="Filter by movie title (partial, case-insensitive).",
     ),
-    release_year: Optional[int] = Query(
+    release_year: Optional[str] = Query(
         None,
-        description="Filter by exact release year.",
+        description="Filter by exact release year as an integer.",
     ),
     genre: Optional[str] = Query(
         None,
@@ -63,15 +63,34 @@ def list_movies_endpoint(
 
     Filters:
     - title: partial, case-insensitive match on movie title
-    - release_year: exact match on release year
+    - release_year: exact match on release year (must be a valid integer)
     - genre: partial, case-insensitive match on genre name
     """
+    parsed_release_year: Optional[int] = None
+
+    if release_year is not None:
+        try:
+            parsed_release_year = int(release_year)
+        except ValueError:
+            api_response = APIResponse(
+                status="failure",
+                data=None,
+                error=ErrorDetail(
+                    code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    message="Invalid release_year",
+                ),
+            )
+            return JSONResponse(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                content=api_response.model_dump(),
+            )
+
     movies_page: PaginatedMovies = list_movies_service(
         db=db,
         page=page,
         page_size=page_size,
         title=title,
-        release_year=release_year,
+        release_year=parsed_release_year,
         genre=genre,
     )
 
@@ -258,7 +277,7 @@ def create_movie_endpoint(
     - HTTP 422
     - status: "failure"
     - data: null
-    - error: { code: 422, message: <reason> }
+    - error: { code: 422, message: "Invalid director_id or genres" }
     """
     try:
         movie_detail = create_movie_service(
