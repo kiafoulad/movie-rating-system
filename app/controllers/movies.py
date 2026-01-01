@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
@@ -15,6 +15,7 @@ from app.schemas.movies import (
 from app.services.movies import (
     add_movie_rating as add_movie_rating_service,
     create_movie as create_movie_service,
+    delete_movie as delete_movie_service,
     get_movie_detail as get_movie_detail_service,
     list_movies as list_movies_service,
     update_movie as update_movie_service,
@@ -191,6 +192,49 @@ def update_movie_endpoint(
         status="success",
         data=movie_detail,
     )
+
+
+@router.delete(
+    "/{movie_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_movie_endpoint(
+    movie_id: int,
+    db: Session = Depends(get_db),
+):
+    """
+    Delete an existing movie by its ID.
+
+    On success:
+    - HTTP 204 (no content)
+
+    On failure (movie not found):
+    - HTTP 404
+    - status: "failure"
+    - data: null
+    - error: { code: 404, message: "Movie not found" }
+    """
+    try:
+        delete_movie_service(
+            db=db,
+            movie_id=movie_id,
+        )
+    except ValueError as exc:
+        api_response = APIResponse(
+            status="failure",
+            data=None,
+            error=ErrorDetail(
+                code=status.HTTP_404_NOT_FOUND,
+                message=str(exc),
+            ),
+        )
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content=api_response.model_dump(),
+        )
+
+    # Spec: 204 No Content, so we return an empty response.
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post(

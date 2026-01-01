@@ -6,6 +6,7 @@ from app.models.models import Movie
 from app.repositories.movies import (
     create_movie as repo_create_movie,
     create_movie_rating as repo_create_movie_rating,
+    delete_movie as repo_delete_movie,
     get_director_by_id as repo_get_director_by_id,
     get_genres_by_ids as repo_get_genres_by_ids,
     get_movie_by_id as repo_get_movie_by_id,
@@ -96,8 +97,8 @@ def _movie_to_detail(movie: Movie) -> MovieDetail:
     list_item = _movie_to_list_item(movie)
 
     updated_at_value: Optional[str] = None
-    # Some schemas/specs expect an 'updated_at' field. If the ORM model
-    # provides it, we convert it to string; otherwise we keep it as None.
+    # Some specs expect an 'updated_at' field. If the ORM model provides it,
+    # we convert it to string; otherwise we keep it as None.
     if hasattr(movie, "updated_at"):
         raw_value = getattr(movie, "updated_at")
         if raw_value is not None:
@@ -248,6 +249,23 @@ def update_movie(
     )
 
     return _movie_to_detail(updated_movie)
+
+
+def delete_movie(
+    db: Session,
+    movie_id: int,
+) -> None:
+    """
+    Delete an existing movie by its ID.
+
+    Raises:
+        ValueError: if the movie does not exist.
+    """
+    movie = repo_get_movie_by_id(db=db, movie_id=movie_id)
+    if movie is None:
+        raise ValueError("Movie not found")
+
+    repo_delete_movie(db=db, movie=movie)
 
 
 def add_movie_rating(
