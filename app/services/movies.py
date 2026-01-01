@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.models.models import Movie
 from app.repositories.movies import (
     create_movie as repo_create_movie,
+    create_movie_rating as repo_create_movie_rating,
     get_director_by_id as repo_get_director_by_id,
     get_genres_by_ids as repo_get_genres_by_ids,
     get_movie_by_id as repo_get_movie_by_id,
@@ -15,6 +16,7 @@ from app.schemas.movies import (
     MovieCreate,
     MovieDetail,
     MovieListItem,
+    MovieRatingCreate,
     PaginatedMovies,
 )
 
@@ -192,3 +194,30 @@ def create_movie(
     )
 
     return _movie_to_detail(movie)
+
+
+def add_movie_rating(
+    db: Session,
+    movie_id: int,
+    rating_in: MovieRatingCreate,
+) -> MovieDetail:
+    """
+    Add a new rating to the given movie and return updated movie details.
+
+    Raises:
+        ValueError: if the movie does not exist.
+    """
+    movie = repo_get_movie_by_id(db=db, movie_id=movie_id)
+    if movie is None:
+        raise ValueError("Movie not found")
+
+    # Create rating
+    repo_create_movie_rating(
+        db=db,
+        movie_id=movie_id,
+        score=rating_in.score,
+    )
+
+    # Reload movie to include the new rating
+    updated_movie = repo_get_movie_by_id(db=db, movie_id=movie_id)
+    return _movie_to_detail(updated_movie)

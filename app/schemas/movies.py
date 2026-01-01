@@ -1,84 +1,76 @@
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field
 
 
 class DirectorInMovie(BaseModel):
     """
-    Director representation as embedded in movie responses.
+    Lightweight director representation used inside movie responses.
     """
-
-    model_config = ConfigDict(from_attributes=True)
-
     id: int
     name: str
     birth_year: Optional[int] = None
     description: Optional[str] = None
 
 
-class MovieBase(BaseModel):
-    """
-    Base fields shared by create & update operations.
-    """
-
-    title: str = Field(..., min_length=1)
-    release_year: Optional[int] = None
-    cast: Optional[str] = None
-
-
-class MovieCreate(MovieBase):
-    """
-    Schema for creating a new movie.
-    """
-
-    director_id: int
-    # List of genre IDs, as required in the spec:
-    # "genres": [1, 5]
-    genres: List[int] = Field(default_factory=list)
-
-
-class MovieUpdate(MovieBase):
-    """
-    Schema for updating an existing movie.
-    """
-
-    # In update we will also send full list of genre IDs to sync.
-    genres: List[int] = Field(default_factory=list)
-
-
 class MovieListItem(BaseModel):
     """
-    Representation of a movie in list endpoints (GET /movies).
+    Representation of a movie item in listing responses.
     """
-
-    model_config = ConfigDict(from_attributes=True)
-
     id: int
     title: str
     release_year: Optional[int] = None
     director: DirectorInMovie
-    # In responses, genres are represented by their names:
-    # "genres": ["Drama", "Crime"]
     genres: List[str]
     average_rating: Optional[float] = None
-    ratings_count: int = 0
+    ratings_count: int
 
 
 class MovieDetail(MovieListItem):
     """
-    Detailed representation of a single movie (GET /movies/{id}).
+    Detailed representation of a movie, extending the list item with cast.
     """
-
     cast: Optional[str] = None
 
 
 class PaginatedMovies(BaseModel):
     """
-    Pagination wrapper for movie list responses.
-    Matches the shape in the project document.
+    Paginated response wrapper for movie lists.
     """
-
     page: int
     page_size: int
     total_items: int
     items: List[MovieListItem]
+
+
+class MovieCreate(BaseModel):
+    """
+    Payload used to create a new movie.
+    """
+    title: str = Field(..., description="Movie title.")
+    director_id: int = Field(..., description="ID of the director.")
+    release_year: Optional[int] = Field(
+        None,
+        description="Release year of the movie.",
+    )
+    cast: Optional[str] = Field(
+        None,
+        description="Cast information for the movie.",
+    )
+    genres: List[int] = Field(
+        ...,
+        description="List of genre IDs associated with the movie.",
+    )
+
+
+class MovieRatingCreate(BaseModel):
+    """
+    Payload used to add a rating to a movie.
+    Score must be between 1 and 10 (inclusive).
+    """
+    score: int = Field(
+        ...,
+        ge=1,
+        le=10,
+        description="Rating score between 1 and 10.",
+    )
