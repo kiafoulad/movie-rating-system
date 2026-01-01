@@ -114,7 +114,33 @@ class MovieRatingCreate(BaseModel):
     """
     score: int = Field(
         ...,
+        description="Rating score between 1 and 10.",
+    )
+
+
+class MovieRatingResponse(BaseModel):
+    """
+    Representation of a single movie rating in responses.
+
+    This is used as the 'data' payload for the rating creation endpoint
+    so that the response shape matches the specification
+    (rating_id, movie_id, score, created_at).
+    """
+    rating_id: int = Field(
+        ...,
+        description="Unique identifier of the rating.",
+    )
+    movie_id: int = Field(
+        ...,
+        description="ID of the movie that was rated.",
+    )
+    score: int = Field(
+        ...,
         ge=1,
         le=10,
         description="Rating score between 1 and 10.",
+    )
+    created_at: Optional[str] = Field(
+        default=None,
+        description="Creation timestamp of the rating in ISO 8601 format.",
     )
