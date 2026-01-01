@@ -169,6 +169,20 @@ def update_movie(
     return movie
 
 
+def delete_movie(
+    db: Session,
+    movie: Movie,
+) -> None:
+    """
+    Delete the given movie from the database.
+
+    Related records (e.g. genres_movie, movie_ratings) are expected to be
+    handled by database-level cascade rules.
+    """
+    db.delete(movie)
+    db.commit()
+
+
 def create_movie_rating(
     db: Session,
     *,
