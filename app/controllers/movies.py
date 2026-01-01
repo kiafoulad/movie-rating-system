@@ -6,8 +6,9 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.schemas.common import APIResponse, ErrorDetail
-from app.schemas.movies import PaginatedMovies
+from app.schemas.movies import MovieCreate, PaginatedMovies
 from app.services.movies import (
+    create_movie as create_movie_service,
     get_movie_detail as get_movie_detail_service,
     list_movies as list_movies_service,
 )
@@ -108,6 +109,54 @@ def get_movie_detail_endpoint(
         )
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
+            content=api_response.model_dump(),
+        )
+
+    return APIResponse(
+        status="success",
+        data=movie_detail,
+    )
+
+
+@router.post(
+    "/",
+    response_model=APIResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_movie_endpoint(
+    movie_in: MovieCreate,
+    db: Session = Depends(get_db),
+):
+    """
+    Create a new movie.
+
+    On success:
+    - HTTP 201
+    - status: "success"
+    - data: MovieDetail
+
+    On failure (invalid director/genres):
+    - HTTP 422
+    - status: "failure"
+    - data: null
+    - error: { code: 422, message: <reason> }
+    """
+    try:
+        movie_detail = create_movie_service(
+            db=db,
+            movie_in=movie_in,
+        )
+    except ValueError as exc:
+        api_response = APIResponse(
+            status="failure",
+            data=None,
+            error=ErrorDetail(
+                code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                message=str(exc),
+            ),
+        )
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             content=api_response.model_dump(),
         )
 

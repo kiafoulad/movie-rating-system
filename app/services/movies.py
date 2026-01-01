@@ -4,11 +4,15 @@ from sqlalchemy.orm import Session
 
 from app.models.models import Movie
 from app.repositories.movies import (
-    get_movies as repo_get_movies,
+    create_movie as repo_create_movie,
+    get_director_by_id as repo_get_director_by_id,
+    get_genres_by_ids as repo_get_genres_by_ids,
     get_movie_by_id as repo_get_movie_by_id,
+    get_movies as repo_get_movies,
 )
 from app.schemas.movies import (
     DirectorInMovie,
+    MovieCreate,
     MovieDetail,
     MovieListItem,
     PaginatedMovies,
@@ -148,5 +152,43 @@ def get_movie_detail(
     movie = repo_get_movie_by_id(db=db, movie_id=movie_id)
     if movie is None:
         return None
+
+    return _movie_to_detail(movie)
+
+
+def create_movie(
+    db: Session,
+    movie_in: MovieCreate,
+) -> MovieDetail:
+    """
+    Create a new movie with the given data.
+
+    Raises:
+        ValueError: if the director_id or one of the genre IDs is invalid.
+    """
+    # Validate director existence
+    director = repo_get_director_by_id(
+        db=db,
+        director_id=movie_in.director_id,
+    )
+    if director is None:
+        raise ValueError("Director not found")
+
+    # Load genres and validate all IDs exist
+    genres = repo_get_genres_by_ids(
+        db=db,
+        genre_ids=movie_in.genres,
+    )
+    if len(genres) != len(set(movie_in.genres)):
+        raise ValueError("One or more genres not found")
+
+    movie = repo_create_movie(
+        db=db,
+        title=movie_in.title,
+        director_id=movie_in.director_id,
+        release_year=movie_in.release_year,
+        cast=movie_in.cast,
+        genres=genres,
+    )
 
     return _movie_to_detail(movie)

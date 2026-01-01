@@ -2,7 +2,7 @@ from typing import List, Optional, Tuple
 
 from sqlalchemy.orm import Session, joinedload
 
-from app.models.models import Movie, Genre
+from app.models.models import Director, Genre, Movie
 
 
 def get_movies(
@@ -75,4 +75,66 @@ def get_movie_by_id(
         .filter(Movie.id == movie_id)
         .first()
     )
+    return movie
+
+
+def get_director_by_id(
+    db: Session,
+    director_id: int,
+) -> Optional[Director]:
+    """
+    Return a director by its ID, or None if not found.
+    """
+    return (
+        db.query(Director)
+        .filter(Director.id == director_id)
+        .first()
+    )
+
+
+def get_genres_by_ids(
+    db: Session,
+    genre_ids: List[int],
+) -> List[Genre]:
+    """
+    Return all genres that match the given list of IDs.
+
+    If some IDs do not exist, they will simply be missing from the result.
+    """
+    if not genre_ids:
+        return []
+
+    return (
+        db.query(Genre)
+        .filter(Genre.id.in_(genre_ids))
+        .all()
+    )
+
+
+def create_movie(
+    db: Session,
+    *,
+    title: str,
+    director_id: int,
+    release_year: Optional[int],
+    cast: Optional[str],
+    genres: List[Genre],
+) -> Movie:
+    """
+    Create a new movie with the given data and persist it to the database.
+    """
+    movie = Movie(
+        title=title,
+        director_id=director_id,
+        release_year=release_year,
+        cast=cast,
+    )
+
+    if genres:
+        movie.genres = genres
+
+    db.add(movie)
+    db.commit()
+    db.refresh(movie)
+
     return movie
