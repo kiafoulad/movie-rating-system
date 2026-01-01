@@ -28,9 +28,17 @@ class MovieListItem(BaseModel):
 
 class MovieDetail(MovieListItem):
     """
-    Detailed representation of a movie, extending the list item with cast.
+    Detailed representation of a movie, extending the list item with cast
+    and (optionally) the last update timestamp.
     """
-    cast: Optional[str] = None
+    cast: Optional[str] = Field(
+        default=None,
+        description="Cast list for the movie.",
+    )
+    updated_at: Optional[str] = Field(
+        default=None,
+        description="Last update timestamp in ISO 8601 format.",
+    )
 
 
 class PaginatedMovies(BaseModel):
@@ -47,8 +55,44 @@ class MovieCreate(BaseModel):
     """
     Payload used to create a new movie.
     """
-    title: str = Field(..., description="Movie title.")
-    director_id: int = Field(..., description="ID of the director.")
+    title: str = Field(
+        ...,
+        description="Movie title.",
+    )
+    director_id: int = Field(
+        ...,
+        description="ID of the director.",
+    )
+    release_year: Optional[int] = Field(
+        None,
+        description="Release year of the movie.",
+    )
+    cast: Optional[str] = Field(
+        None,
+        description="Cast information for the movie.",
+    )
+    genres: List[int] = Field(
+        ...,
+        description="List of genre IDs associated with the movie.",
+    )
+
+
+class MovieUpdate(BaseModel):
+    """
+    Payload used to update an existing movie.
+
+    According to the spec, this includes:
+    - title
+    - release_year
+    - cast
+    - genres (as a list of genre IDs)
+
+    The director is not changed by this operation.
+    """
+    title: str = Field(
+        ...,
+        description="Movie title.",
+    )
     release_year: Optional[int] = Field(
         None,
         description="Release year of the movie.",
