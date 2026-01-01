@@ -19,6 +19,7 @@ from app.schemas.movies import (
     MovieDetail,
     MovieListItem,
     MovieRatingCreate,
+    MovieRatingResponse,
     MovieUpdate,
     PaginatedMovies,
 )
@@ -272,24 +273,41 @@ def add_movie_rating(
     db: Session,
     movie_id: int,
     rating_in: MovieRatingCreate,
-) -> MovieDetail:
+) -> MovieRatingResponse:
     """
-    Add a new rating to the given movie and return updated movie details.
+    Add a new rating to the given movie and return the created rating
+    as a MovieRatingResponse so that the response shape matches the spec.
 
     Raises:
         ValueError: if the movie does not exist.
+        ValueError: if the score is out of the allowed range.
     """
+    # Ensure the movie exists
     movie = repo_get_movie_by_id(db=db, movie_id=movie_id)
     if movie is None:
         raise ValueError("Movie not found")
 
+    # Validate score range according to the spec
+    score = rating_in.score
+    if score < 1 or score > 10:
+        raise ValueError("Score must be an integer between 1 and 10")
+
     # Create rating
-    repo_create_movie_rating(
+    rating = repo_create_movie_rating(
         db=db,
         movie_id=movie_id,
-        score=rating_in.score,
+        score=score,
     )
 
-    # Reload movie to include the new rating
-    updated_movie = repo_get_movie_by_id(db=db, movie_id=movie_id)
-    return _movie_to_detail(updated_movie)
+    created_at_value: Optional[str] = None
+    if hasattr(rating, "created_at"):
+        raw_value = getattr(rating, "created_at")
+        if raw_value is not None:
+            created_at_value = str(raw_value)
+
+    return MovieRatingResponse(
+        rating_id=rating.id,
+        movie_id=rating.movie_id,
+        score=rating.score,
+        created_at=created_at_value,
+    )

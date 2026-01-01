@@ -301,36 +301,56 @@ def add_movie_rating_endpoint(
     On success:
     - HTTP 201
     - status: "success"
-    - data: MovieDetail (with updated average_rating and ratings_count)
+    - data: MovieRatingResponse
+      (rating_id, movie_id, score, created_at)
 
-    On failure (movie not found):
-    - HTTP 404
-    - status: "failure"
-    - data: null
-    - error: { code: 404, message: "Movie not found" }
+    On failure:
+    - Movie not found:
+      - HTTP 404
+      - status: "failure"
+      - error: { code: 404, message: "Movie not found" }
+    - Invalid score:
+      - HTTP 422
+      - status: "failure"
+      - error: {
+          code: 422,
+          message: "Score must be an integer between 1 and 10"
+        }
     """
     try:
-        movie_detail = add_movie_rating_service(
+        rating = add_movie_rating_service(
             db=db,
             movie_id=movie_id,
             rating_in=rating_in,
         )
     except ValueError as exc:
-        # Currently only "Movie not found" is expected.
+        message = str(exc)
+
+        if message == "Movie not found":
+            status_code = status.HTTP_404_NOT_FOUND
+            error_code = status.HTTP_404_NOT_FOUND
+        elif message == "Score must be an integer between 1 and 10":
+            status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
+            error_code = status.HTTP_422_UNPROCESSABLE_ENTITY
+        else:
+            # Fallback for any unexpected ValueError
+            status_code = status.HTTP_400_BAD_REQUEST
+            error_code = status.HTTP_400_BAD_REQUEST
+
         api_response = APIResponse(
             status="failure",
             data=None,
             error=ErrorDetail(
-                code=status.HTTP_404_NOT_FOUND,
-                message=str(exc),
+                code=error_code,
+                message=message,
             ),
         )
         return JSONResponse(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=status_code,
             content=api_response.model_dump(),
         )
 
     return APIResponse(
         status="success",
-        data=movie_detail,
+        data=rating,
     )
