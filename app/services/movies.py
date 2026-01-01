@@ -188,16 +188,18 @@ def create_movie(
         db=db,
         director_id=movie_in.director_id,
     )
-    if director is None:
-        raise ValueError("Director not found")
 
     # Load genres and validate all IDs exist
     genres = repo_get_genres_by_ids(
         db=db,
         genre_ids=movie_in.genres,
     )
-    if len(genres) != len(set(movie_in.genres)):
-        raise ValueError("One or more genres not found")
+
+    # According to the spec, any invalid director_id or genre IDs
+    # must result in a single validation error message:
+    # "Invalid director_id or genres"
+    if director is None or len(genres) != len(set(movie_in.genres)):
+        raise ValueError("Invalid director_id or genres")
 
     movie = repo_create_movie(
         db=db,
