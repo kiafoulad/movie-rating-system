@@ -1,16 +1,14 @@
 -- seeddb.sql
--- **DATA LOAD ONLY** - This script assumes the final schema is already
--- created by Alembic / SQLAlchemy migrations.
--- Loads ~1000 REAL movies (titles, directors, cast, genres) from TMDB 5000
--- dataset into the final tables of the Movie Rating System.
+-- DATA LOAD ONLY - Assumes the final schema is already created.
+-- Loads ~1000 movies + directors + genres + ratings from TMDB 5000 dataset
+-- into the final tables of the Movie Rating System.
 --
--- Requires:
---   - tmdb_5000_movies.csv
---   - tmdb_5000_credits.csv
--- in the same directory as this script (scripts/).
+-- Requires (in the same project root, relative to this script):
+--   scripts/tmdb_5000_movies.csv
+--   scripts/tmdb_5000_credits.csv
 --
--- Example run (adjust username/password/db as needed):
---   psql -U postgres -d movie_rating_db -h localhost -f scripts/seeddb.sql
+-- Example run (from project root):
+--   psql -U postgres -d movie_rating_db -f scripts/seeddb.sql
 
 BEGIN;
 
@@ -22,12 +20,10 @@ BEGIN;
 DELETE FROM movie_ratings;
 DELETE FROM genres_movie;
 DELETE FROM movies;
-DELETE FROM directors;
 DELETE FROM genres;
+DELETE FROM directors;
 
--- Resetting sequences (IDs) for main tables.
--- NOTE: these sequence names assume PostgreSQL default naming for SERIAL:
---   <table>_<column>_seq
+-- Reset sequences (default names for SERIAL are <table>_<column>_seq)
 ALTER SEQUENCE directors_id_seq RESTART WITH 1;
 ALTER SEQUENCE genres_id_seq RESTART WITH 1;
 ALTER SEQUENCE movies_id_seq RESTART WITH 1;
@@ -36,8 +32,6 @@ ALTER SEQUENCE movie_ratings_id_seq RESTART WITH 1;
 -------------------------------
 -- 2. Drop Staging Tables
 -------------------------------
--- These temporary tables must be dropped and recreated on every run.
-
 DROP TABLE IF EXISTS tmdb_movies_raw CASCADE;
 DROP TABLE IF EXISTS tmdb_credits_raw CASCADE;
 DROP TABLE IF EXISTS tmdb_selected CASCADE;
@@ -78,41 +72,21 @@ CREATE TABLE tmdb_credits_raw (
 );
 
 -------------------------------
--- 4. Load Raw Data (psql \copy)
+-- 4. Load Raw Data from CSV
 -------------------------------
--- Requires CSV files to be in the same directory as this script.
+-- IMPORTANT:
+--   These paths are relative to the directory where you run psql.
+--   If you run:
+--     psql -U postgres -d movie_rating_db -f scripts/seeddb.sql
+--   then 'scripts/...' is correct.
 
-\copy tmdb_movies_raw (
-    budget,
-    genres,
-    homepage,
-    id,
-    keywords,
-    original_language,
-    original_title,
-    overview,
-    popularity,
-    production_companies,
-    production_countries,
-    release_date,
-    revenue,
-    runtime,
-    spoken_languages,
-    status,
-    tagline,
-    title,
-    vote_average,
-    vote_count
-) FROM 'tmdb_5000_movies.csv' CSV HEADER;
+\copy tmdb_movies_raw (budget, genres, homepage, id, keywords, original_language, original_title, overview, popularity, production_companies, production_countries, release_date, revenue, runtime, spoken_languages, status, tagline, title, vote_average, vote_count) FROM 'scripts/tmdb_5000_movies.csv' CSV HEADER;
 
-\copy tmdb_credits_raw (movie_id, title, "cast", crew)
-FROM 'tmdb_5000_credits.csv' CSV HEADER;
+\copy tmdb_credits_raw (movie_id, title, "cast", crew) FROM 'scripts/tmdb_5000_credits.csv' CSV HEADER;
 
 -------------------------------
--- 5. Insert Genres (from TMDB)
+-- 5. Insert Genres (final table)
 -------------------------------
--- Real genres extracted from JSON in tmdb_movies_raw.genres.
-
 INSERT INTO genres (name, description)
 SELECT DISTINCT
     trim(g ->> 'name') AS name,
@@ -123,7 +97,7 @@ WHERE g ->> 'name' IS NOT NULL
 ORDER BY 1;
 
 -------------------------------
--- 6. Insert Directors (job = 'Director')
+-- 6. Insert Directors (final table)
 -------------------------------
 INSERT INTO directors (name, birth_year, description)
 SELECT DISTINCT
@@ -137,10 +111,9 @@ WHERE c ->> 'job' = 'Director'
 ORDER BY 1;
 
 -------------------------------
--- 7. Select Top ~1000 Movies (Staging)
+-- 7. Select Top ~1000 Movies into tmdb_selected
 -------------------------------
 -- Criteria: highest vote_count, then popularity, then vote_average.
--- We only keep movies that have a valid director extracted from crew.
 
 CREATE TABLE tmdb_selected AS
 WITH joined AS (
@@ -191,9 +164,7 @@ WHERE rn <= 1000;
 -------------------------------
 -- 8. Insert Movies (final movies table)
 -------------------------------
--- NOTE: Project schema:
---   movies(id, title, director_id, release_year, "cast")
---   There is NO 'description' column in this schema, so we do NOT insert it.
+-- Project schema: movies(id, title, director_id, release_year, "cast")
 
 INSERT INTO movies (title, director_id, release_year, "cast")
 SELECT
@@ -203,7 +174,6 @@ SELECT
         NULLIF(split_part(s.release_date, '-', 1), '')::INT,
         2000
     ) AS release_year,
-    -- Extract top 3 cast members from cast JSON
     (
         SELECT string_agg(cn, ', ')
         FROM (
@@ -221,10 +191,9 @@ JOIN directors d
 ORDER BY s.tmdb_id;
 
 -------------------------------
--- 9. Insert Genres for Each Movie (genres_movie)
+-- 9. Insert Movie-Genre Relations (genres_movie)
 -------------------------------
--- IMPORTANT: In this project the junction table is named 'genres_movie'
--- and has (movie_id, genre_id) as primary key.
+-- Project schema: genres_movie(movie_id, genre_id)
 
 INSERT INTO genres_movie (movie_id, genre_id)
 SELECT
@@ -244,17 +213,14 @@ JOIN genres g
 GROUP BY mv.id, g.id;
 
 -------------------------------
--- 10. Generate Random Ratings
+-- 10. Generate Random Ratings (movie_ratings)
 -------------------------------
--- Each movie gets between 1 and 40 random ratings.
--- NOTE: Project schema for movie_ratings:
---   movie_ratings(id, movie_id, score)
--- There is NO 'rated_at' column, so we only insert (movie_id, score).
+-- Project schema: movie_ratings(id, movie_id, score)
 
 INSERT INTO movie_ratings (movie_id, score)
 SELECT
     m.id,
-    (floor(random() * 10) + 1)::INT AS score -- Random score 1-10
+    (floor(random() * 10) + 1)::INT AS score  -- Random score 1-10
 FROM movies m,
      LATERAL generate_series(1, (1 + floor(random() * 40))::INT) AS s(i);
 
