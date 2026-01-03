@@ -20,6 +20,10 @@ from app.services.movies import (
     list_movies as list_movies_service,
     update_movie as update_movie_service,
 )
+from app.core.logging import get_logger
+
+# Initialize logger
+logger = get_logger()
 
 router = APIRouter(
     prefix="/api/v1/movies",
@@ -66,6 +70,8 @@ def list_movies_endpoint(
     - release_year: exact match on release year (must be a valid integer)
     - genre: partial, case-insensitive match on genre name
     """
+    logger.info(f"Listing movies with filters - title: {title}, release_year: {release_year}, genre: {genre}")
+    
     parsed_release_year: Optional[int] = None
 
     if release_year is not None:
@@ -80,6 +86,7 @@ def list_movies_endpoint(
                     message="Invalid release_year",
                 ),
             )
+            logger.error(f"Invalid release_year filter: {release_year}")
             return JSONResponse(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 content=api_response.model_dump(),
@@ -94,6 +101,7 @@ def list_movies_endpoint(
         genre=genre,
     )
 
+    logger.info(f"Fetched {len(movies_page.items)} movies.")
     return APIResponse(
         status="success",
         data=movies_page,
@@ -120,12 +128,15 @@ def get_movie_detail_endpoint(
     - data: null
     - error: { code: 404, message: "Movie not found" }
     """
+    logger.info(f"Fetching movie details for movie ID {movie_id}")
+    
     movie_detail = get_movie_detail_service(
         db=db,
         movie_id=movie_id,
     )
 
     if movie_detail is None:
+        logger.error(f"Movie with ID {movie_id} not found.")
         api_response = APIResponse(
             status="failure",
             data=None,
@@ -139,6 +150,7 @@ def get_movie_detail_endpoint(
             content=api_response.model_dump(),
         )
 
+    logger.info(f"Successfully fetched details for movie ID {movie_id}")
     return APIResponse(
         status="success",
         data=movie_detail,
@@ -177,6 +189,8 @@ def update_movie_endpoint(
       - status: "failure"
       - error: { code: 422, message: "One or more genres not found" }
     """
+    logger.info(f"Updating movie with ID {movie_id}")
+
     try:
         movie_detail = update_movie_service(
             db=db,
@@ -187,10 +201,11 @@ def update_movie_endpoint(
         message = str(exc)
 
         if message == "Movie not found":
+            logger.error(f"Movie with ID {movie_id} not found.")
             status_code = status.HTTP_404_NOT_FOUND
             error_code = status.HTTP_404_NOT_FOUND
         else:
-            # All other ValueError cases are treated as invalid input
+            logger.error(f"Invalid genres for movie ID {movie_id}: {message}")
             status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
             error_code = status.HTTP_422_UNPROCESSABLE_ENTITY
 
@@ -207,6 +222,7 @@ def update_movie_endpoint(
             content=api_response.model_dump(),
         )
 
+    logger.info(f"Successfully updated movie with ID {movie_id}")
     return APIResponse(
         status="success",
         data=movie_detail,
@@ -233,12 +249,15 @@ def delete_movie_endpoint(
     - data: null
     - error: { code: 404, message: "Movie not found" }
     """
+    logger.info(f"Deleting movie with ID {movie_id}")
+
     try:
         delete_movie_service(
             db=db,
             movie_id=movie_id,
         )
     except ValueError as exc:
+        logger.error(f"Error deleting movie with ID {movie_id}: {str(exc)}")
         api_response = APIResponse(
             status="failure",
             data=None,
@@ -252,6 +271,7 @@ def delete_movie_endpoint(
             content=api_response.model_dump(),
         )
 
+    logger.info(f"Movie with ID {movie_id} deleted successfully")
     # Spec: 204 No Content, so we return an empty response.
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -279,12 +299,15 @@ def create_movie_endpoint(
     - data: null
     - error: { code: 422, message: "Invalid director_id or genres" }
     """
+    logger.info(f"Creating movie: {movie_in.title}")
+
     try:
         movie_detail = create_movie_service(
             db=db,
             movie_in=movie_in,
         )
     except ValueError as exc:
+        logger.error(f"Error creating movie: {str(exc)}")
         api_response = APIResponse(
             status="failure",
             data=None,
@@ -298,6 +321,7 @@ def create_movie_endpoint(
             content=api_response.model_dump(),
         )
 
+    logger.info(f"Movie {movie_in.title} created successfully")
     return APIResponse(
         status="success",
         data=movie_detail,
@@ -336,6 +360,8 @@ def add_movie_rating_endpoint(
           message: "Score must be an integer between 1 and 10"
         }
     """
+    logger.info(f"Adding rating for movie with ID {movie_id} and score {rating_in.score}")
+
     try:
         rating = add_movie_rating_service(
             db=db,
@@ -356,6 +382,7 @@ def add_movie_rating_endpoint(
             status_code = status.HTTP_400_BAD_REQUEST
             error_code = status.HTTP_400_BAD_REQUEST
 
+        logger.error(f"Error adding rating for movie with ID {movie_id}: {message}")
         api_response = APIResponse(
             status="failure",
             data=None,
@@ -369,6 +396,7 @@ def add_movie_rating_endpoint(
             content=api_response.model_dump(),
         )
 
+    logger.info(f"Rating for movie with ID {movie_id} added successfully")
     return APIResponse(
         status="success",
         data=rating,

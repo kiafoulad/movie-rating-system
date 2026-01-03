@@ -1,7 +1,5 @@
 from typing import Optional
-
 from sqlalchemy.orm import Session
-
 from app.models.models import Movie
 from app.repositories.movies import (
     create_movie as repo_create_movie,
@@ -23,7 +21,10 @@ from app.schemas.movies import (
     MovieUpdate,
     PaginatedMovies,
 )
+from app.core.logging import get_logger
 
+# Initialize logger
+logger = get_logger()
 
 def _compute_average_rating(movie: Movie) -> Optional[float]:
     """
@@ -32,19 +33,21 @@ def _compute_average_rating(movie: Movie) -> Optional[float]:
     Returns None if the movie has no ratings.
     """
     if not movie.ratings:
+        logger.info(f"Movie '{movie.title}' has no ratings.")
         return None
 
     total = sum(rating.score for rating in movie.ratings)
     count = len(movie.ratings)
+    logger.info(f"Computed average rating for movie '{movie.title}': {round(total / count, 1)}")
     return round(total / count, 1)
-
 
 def _compute_ratings_count(movie: Movie) -> int:
     """
     Compute the number of ratings for a given movie.
     """
-    return len(movie.ratings)
-
+    count = len(movie.ratings)
+    logger.info(f"Movie '{movie.title}' has {count} ratings.")
+    return count
 
 def _build_director_schema(movie: Movie) -> DirectorInMovie:
     """
@@ -53,6 +56,7 @@ def _build_director_schema(movie: Movie) -> DirectorInMovie:
     Falls back to an 'Unknown' director if the relation is missing.
     """
     if movie.director is None:
+        logger.warning(f"Movie '{movie.title}' has no director.")
         return DirectorInMovie(
             id=0,
             name="Unknown",
@@ -60,13 +64,13 @@ def _build_director_schema(movie: Movie) -> DirectorInMovie:
             description=None,
         )
 
+    logger.info(f"Director for movie '{movie.title}' is {movie.director.name}.")
     return DirectorInMovie(
         id=movie.director.id,
         name=movie.director.name,
         birth_year=movie.director.birth_year,
         description=movie.director.description,
     )
-
 
 def _movie_to_list_item(movie: Movie) -> MovieListItem:
     """
@@ -77,6 +81,7 @@ def _movie_to_list_item(movie: Movie) -> MovieListItem:
     average_rating = _compute_average_rating(movie)
     ratings_count = _compute_ratings_count(movie)
 
+    logger.info(f"Mapping movie '{movie.title}' to list item.")
     return MovieListItem(
         id=movie.id,
         title=movie.title,
@@ -86,7 +91,6 @@ def _movie_to_list_item(movie: Movie) -> MovieListItem:
         average_rating=average_rating,
         ratings_count=ratings_count,
     )
-
 
 def _movie_to_detail(movie: Movie) -> MovieDetail:
     """
@@ -98,19 +102,17 @@ def _movie_to_detail(movie: Movie) -> MovieDetail:
     list_item = _movie_to_list_item(movie)
 
     updated_at_value: Optional[str] = None
-    # Some specs expect an 'updated_at' field. If the ORM model provides it,
-    # we convert it to string; otherwise we keep it as None.
     if hasattr(movie, "updated_at"):
         raw_value = getattr(movie, "updated_at")
         if raw_value is not None:
             updated_at_value = str(raw_value)
 
+    logger.info(f"Mapping movie '{movie.title}' to detailed information.")
     return MovieDetail(
         **list_item.model_dump(),
         cast=movie.cast,
         updated_at=updated_at_value,
     )
-
 
 def list_movies(
     db: Session,
@@ -122,14 +124,9 @@ def list_movies(
 ) -> PaginatedMovies:
     """
     List movies with pagination and optional filters.
-
-    Filters:
-    - title: partial, case-insensitive match on movie title
-    - release_year: exact match on release year
-    - genre: partial, case-insensitive match on genre name
-
-    If multiple filters are provided, they are combined with AND logic.
     """
+    logger.info(f"Fetching movies list with filters - title: {title}, release_year: {release_year}, genre: {genre}")
+    
     movies, total_items = repo_get_movies(
         db=db,
         page=page,
@@ -147,6 +144,7 @@ def list_movies(
 
     items = [_movie_to_list_item(movie) for movie in movies]
 
+    logger.info(f"Fetched {len(items)} movies successfully.")
     return PaginatedMovies(
         page=page,
         page_size=page_size,
@@ -154,24 +152,22 @@ def list_movies(
         items=items,
     )
 
-
 def get_movie_detail(
     db: Session,
     movie_id: int,
 ) -> Optional[MovieDetail]:
     """
     Get detailed information about a single movie by its ID.
-
-    Returns:
-        - MovieDetail if the movie exists.
-        - None if the movie does not exist.
     """
+    logger.info(f"Fetching details for movie with ID {movie_id}")
+
     movie = repo_get_movie_by_id(db=db, movie_id=movie_id)
     if movie is None:
+        logger.error(f"Movie with ID {movie_id} not found.")
         return None
 
+    logger.info(f"Fetched movie details for movie ID {movie_id}")
     return _movie_to_detail(movie)
-
 
 def create_movie(
     db: Session,
@@ -179,26 +175,23 @@ def create_movie(
 ) -> MovieDetail:
     """
     Create a new movie with the given data.
-
-    Raises:
-        ValueError: if the director_id or one of the genre IDs is invalid.
     """
-    # Validate director existence
+    logger.info(f"Creating movie: {movie_in.title}")
+
     director = repo_get_director_by_id(
         db=db,
         director_id=movie_in.director_id,
     )
+    logger.info(f"Director found: {director.name}" if director else "Director not found.")
 
-    # Load genres and validate all IDs exist
     genres = repo_get_genres_by_ids(
         db=db,
         genre_ids=movie_in.genres,
     )
+    logger.info(f"Genres found: {[genre.name for genre in genres]}")
 
-    # According to the spec, any invalid director_id or genre IDs
-    # must result in a single validation error message:
-    # "Invalid director_id or genres"
     if director is None or len(genres) != len(set(movie_in.genres)):
+        logger.error("Invalid director_id or genres")
         raise ValueError("Invalid director_id or genres")
 
     movie = repo_create_movie(
@@ -210,8 +203,8 @@ def create_movie(
         genres=genres,
     )
 
+    logger.info(f"Movie {movie.title} created successfully")
     return _movie_to_detail(movie)
-
 
 def update_movie(
     db: Session,
@@ -220,26 +213,20 @@ def update_movie(
 ) -> MovieDetail:
     """
     Update an existing movie with the given data.
-
-    According to the spec:
-    - Only title, release_year, cast, and genres are updated.
-    - The director is not changed by this operation.
-
-    Raises:
-        ValueError: if the movie does not exist.
-        ValueError: if one or more genre IDs are invalid.
     """
-    # Ensure the movie exists
+    logger.info(f"Updating movie with ID {movie_id}")
+
     movie = repo_get_movie_by_id(db=db, movie_id=movie_id)
     if movie is None:
+        logger.error(f"Movie with ID {movie_id} not found.")
         raise ValueError("Movie not found")
 
-    # Load genres and validate all IDs exist
     genres = repo_get_genres_by_ids(
         db=db,
         genre_ids=movie_in.genres,
     )
     if len(genres) != len(set(movie_in.genres)):
+        logger.error("One or more genres not found")
         raise ValueError("One or more genres not found")
 
     updated_movie = repo_update_movie(
@@ -251,8 +238,8 @@ def update_movie(
         genres=genres,
     )
 
+    logger.info(f"Movie with ID {movie_id} updated successfully")
     return _movie_to_detail(updated_movie)
-
 
 def delete_movie(
     db: Session,
@@ -260,16 +247,16 @@ def delete_movie(
 ) -> None:
     """
     Delete an existing movie by its ID.
-
-    Raises:
-        ValueError: if the movie does not exist.
     """
+    logger.info(f"Deleting movie with ID {movie_id}")
+
     movie = repo_get_movie_by_id(db=db, movie_id=movie_id)
     if movie is None:
+        logger.error(f"Movie with ID {movie_id} not found.")
         raise ValueError("Movie not found")
 
     repo_delete_movie(db=db, movie=movie)
-
+    logger.info(f"Movie with ID {movie_id} deleted successfully")
 
 def add_movie_rating(
     db: Session,
@@ -277,39 +264,29 @@ def add_movie_rating(
     rating_in: MovieRatingCreate,
 ) -> MovieRatingResponse:
     """
-    Add a new rating to the given movie and return the created rating
-    as a MovieRatingResponse so that the response shape matches the spec.
-
-    Raises:
-        ValueError: if the movie does not exist.
-        ValueError: if the score is out of the allowed range.
+    Add a new rating to the given movie and return the created rating.
     """
-    # Ensure the movie exists
+    logger.info(f"Adding rating for movie with ID {movie_id} and score {rating_in.score}")
+
     movie = repo_get_movie_by_id(db=db, movie_id=movie_id)
     if movie is None:
+        logger.error(f"Movie with ID {movie_id} not found.")
         raise ValueError("Movie not found")
 
-    # Validate score range according to the spec
-    score = rating_in.score
-    if score < 1 or score > 10:
+    if rating_in.score < 1 or rating_in.score > 10:
+        logger.error("Score must be an integer between 1 and 10")
         raise ValueError("Score must be an integer between 1 and 10")
 
-    # Create rating
     rating = repo_create_movie_rating(
         db=db,
         movie_id=movie_id,
-        score=score,
+        score=rating_in.score,
     )
 
-    created_at_value: Optional[str] = None
-    if hasattr(rating, "created_at"):
-        raw_value = getattr(rating, "created_at")
-        if raw_value is not None:
-            created_at_value = str(raw_value)
-
+    logger.info(f"Rating for movie with ID {movie_id} added successfully")
     return MovieRatingResponse(
         rating_id=rating.id,
         movie_id=rating.movie_id,
         score=rating.score,
-        created_at=created_at_value,
+        created_at=str(rating.created_at) if rating.created_at else None,
     )

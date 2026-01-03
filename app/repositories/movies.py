@@ -1,9 +1,10 @@
 from typing import List, Optional, Tuple
-
 from sqlalchemy.orm import Session, joinedload
-
 from app.models.models import Director, Genre, Movie, MovieRating
+from app.core.logging import get_logger
 
+# Initialize logger
+logger = get_logger()
 
 def get_movies(
     db: Session,
@@ -17,6 +18,8 @@ def get_movies(
     Return a paginated list of movies and the total number of items.
     This function handles database access and basic filtering.
     """
+    logger.info(f"Fetching movies - page: {page}, page_size: {page_size}, title: {title}, release_year: {release_year}, genre: {genre}")
+    
     if page < 1:
         page = 1
     if page_size <= 0:
@@ -32,20 +35,14 @@ def get_movies(
         .order_by(Movie.id)
     )
 
-    # Apply filters based on optional parameters.
-    # If multiple filters are provided, they are combined with AND logic.
     if title:
-        # Partial, case-insensitive match on movie title
         query = query.filter(Movie.title.ilike(f"%{title}%"))
 
     if release_year is not None:
         query = query.filter(Movie.release_year == release_year)
 
     if genre:
-        # Partial, case-insensitive match on genre name
-        query = query.filter(
-            Movie.genres.any(Genre.name.ilike(f"%{genre}%"))
-        )
+        query = query.filter(Movie.genres.any(Genre.name.ilike(f"%{genre}%")))
 
     total_items = query.count()
 
@@ -55,6 +52,7 @@ def get_movies(
         .all()
     )
 
+    logger.info(f"Fetched {len(movies)} movies out of {total_items} total items.")
     return movies, total_items
 
 
@@ -65,6 +63,8 @@ def get_movie_by_id(
     """
     Return a single movie by its ID, or None if not found.
     """
+    logger.info(f"Fetching movie with ID: {movie_id}")
+
     movie = (
         db.query(Movie)
         .options(
@@ -75,6 +75,12 @@ def get_movie_by_id(
         .filter(Movie.id == movie_id)
         .first()
     )
+
+    if movie is None:
+        logger.warning(f"Movie with ID {movie_id} not found.")
+    else:
+        logger.info(f"Movie with ID {movie_id} found: {movie.title}")
+
     return movie
 
 
@@ -85,11 +91,16 @@ def get_director_by_id(
     """
     Return a director by its ID, or None if not found.
     """
-    return (
-        db.query(Director)
-        .filter(Director.id == director_id)
-        .first()
-    )
+    logger.info(f"Fetching director with ID: {director_id}")
+
+    director = db.query(Director).filter(Director.id == director_id).first()
+    
+    if director is None:
+        logger.warning(f"Director with ID {director_id} not found.")
+    else:
+        logger.info(f"Director with ID {director_id} found: {director.name}")
+    
+    return director
 
 
 def get_genres_by_ids(
@@ -101,14 +112,14 @@ def get_genres_by_ids(
 
     If some IDs do not exist, they will simply be missing from the result.
     """
+    logger.info(f"Fetching genres for IDs: {genre_ids}")
+    
     if not genre_ids:
         return []
 
-    return (
-        db.query(Genre)
-        .filter(Genre.id.in_(genre_ids))
-        .all()
-    )
+    genres = db.query(Genre).filter(Genre.id.in_(genre_ids)).all()
+    logger.info(f"Found {len(genres)} genres for the given IDs.")
+    return genres
 
 
 def create_movie(
@@ -123,6 +134,8 @@ def create_movie(
     """
     Create a new movie with the given data and persist it to the database.
     """
+    logger.info(f"Creating movie: {title}")
+
     movie = Movie(
         title=title,
         director_id=director_id,
@@ -137,6 +150,7 @@ def create_movie(
     db.commit()
     db.refresh(movie)
 
+    logger.info(f"Movie created successfully: {movie.title} with ID {movie.id}")
     return movie
 
 
@@ -151,12 +165,9 @@ def update_movie(
 ) -> Movie:
     """
     Update an existing movie with the given data and persist changes.
-
-    This function assumes that:
-    - The movie instance already exists and is loaded from the database.
-    - The genres list contains fully loaded Genre objects that have already
-      been validated by the service layer.
     """
+    logger.info(f"Updating movie with ID {movie.id}: {title}")
+
     movie.title = title
     movie.release_year = release_year
     movie.cast = cast
@@ -166,6 +177,7 @@ def update_movie(
     db.commit()
     db.refresh(movie)
 
+    logger.info(f"Movie with ID {movie.id} updated successfully")
     return movie
 
 
@@ -175,12 +187,13 @@ def delete_movie(
 ) -> None:
     """
     Delete the given movie from the database.
-
-    Related records (e.g. genres_movie, movie_ratings) are expected to be
-    handled by database-level cascade rules.
     """
+    logger.info(f"Deleting movie with ID {movie.id}: {movie.title}")
+
     db.delete(movie)
     db.commit()
+
+    logger.info(f"Movie with ID {movie.id} deleted successfully")
 
 
 def create_movie_rating(
@@ -192,6 +205,8 @@ def create_movie_rating(
     """
     Create a new rating for the given movie.
     """
+    logger.info(f"Creating movie rating for movie ID {movie_id} with score {score}")
+
     rating = MovieRating(
         movie_id=movie_id,
         score=score,
@@ -201,4 +216,5 @@ def create_movie_rating(
     db.commit()
     db.refresh(rating)
 
+    logger.info(f"Movie rating created for movie ID {movie_id} with rating ID {rating.id}")
     return rating
