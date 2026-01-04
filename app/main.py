@@ -1,6 +1,9 @@
 from fastapi import FastAPI
 
 from app.controllers.movies import router as movies_router
+from app.core.logging_config import setup_logging
+
+setup_logging()
 
 # Create FastAPI application instance
 app = FastAPI(
