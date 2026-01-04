@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, Response, status
@@ -20,6 +21,8 @@ from app.services.movies import (
     list_movies as list_movies_service,
     update_movie as update_movie_service,
 )
+
+logger = logging.getLogger("movie_rating")
 
 router = APIRouter(
     prefix="/api/v1/movies",
@@ -66,8 +69,19 @@ def list_movies_endpoint(
     - release_year: exact match on release year (must be a valid integer)
     - genre: partial, case-insensitive match on genre name
     """
-    parsed_release_year: Optional[int] = None
+    route = "/api/v1/movies"
+    logger.info(
+        "List movies requested (page=%s, page_size=%s, title=%s, release_year=%s, "
+        "genre=%s, route=%s)",
+        page,
+        page_size,
+        title,
+        release_year,
+        genre,
+        route,
+    )
 
+    parsed_release_year: Optional[int] = None
     if release_year is not None:
         try:
             parsed_release_year = int(release_year)
@@ -85,13 +99,23 @@ def list_movies_endpoint(
                 content=api_response.model_dump(),
             )
 
-    movies_page: PaginatedMovies = list_movies_service(
-        db=db,
-        page=page,
-        page_size=page_size,
-        title=title,
-        release_year=parsed_release_year,
-        genre=genre,
+    try:
+        movies_page: PaginatedMovies = list_movies_service(
+            db=db,
+            page=page,
+            page_size=page_size,
+            title=title,
+            release_year=parsed_release_year,
+            genre=genre,
+        )
+    except Exception:
+        logger.error("Failed to list movies (route=%s)", route, exc_info=True)
+        raise
+
+    logger.info(
+        "List movies success (total_items=%s, route=%s)",
+        movies_page.total_items,
+        route,
     )
 
     return APIResponse(
@@ -336,6 +360,14 @@ def add_movie_rating_endpoint(
           message: "Score must be an integer between 1 and 10"
         }
     """
+    route = f"/api/v1/movies/{movie_id}/ratings"
+    logger.info(
+        "Rating movie (movie_id=%s, rating=%s, route=%s)",
+        movie_id,
+        rating_in.score,
+        route,
+    )
+
     try:
         rating = add_movie_rating_service(
             db=db,
@@ -344,6 +376,14 @@ def add_movie_rating_endpoint(
         )
     except ValueError as exc:
         message = str(exc)
+
+        if message == "Score must be an integer between 1 and 10":
+            logger.warning(
+                "Invalid rating value (movie_id=%s, rating=%s, route=%s)",
+                movie_id,
+                rating_in.score,
+                route,
+            )
 
         if message == "Movie not found":
             status_code = status.HTTP_404_NOT_FOUND
@@ -368,6 +408,20 @@ def add_movie_rating_endpoint(
             status_code=status_code,
             content=api_response.model_dump(),
         )
+    except Exception:
+        logger.error(
+            "Failed to save rating (movie_id=%s, rating=%s)",
+            movie_id,
+            rating_in.score,
+            exc_info=True,
+        )
+        raise
+
+    logger.info(
+        "Rating saved successfully (movie_id=%s, rating=%s)",
+        movie_id,
+        rating_in.score,
+    )
 
     return APIResponse(
         status="success",
