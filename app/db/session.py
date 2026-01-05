@@ -8,11 +8,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Read DATABASE_URL from environment
-DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = os.getenv("DATABASE_URL") or os.getenv("URL_DATABASE")
+
 
 if not DATABASE_URL:
     # Fail fast if DATABASE_URL is not configured
-    raise ValueError("DATABASE_URL is not set in the environment variables.")
+    raise ValueError("DATABASE_URL (or URL_DATABASE) is not set in the environment variables.")
 
 # Create SQLAlchemy engine
 # echo=True is useful during development to see generated SQL queries
