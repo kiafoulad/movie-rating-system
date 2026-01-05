@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -23,6 +24,25 @@ from app.schemas.movies import (
     MovieUpdate,
     PaginatedMovies,
 )
+
+
+def _to_iso_z(dt: Optional[datetime]) -> Optional[str]:
+    """Convert a datetime to ISO-8601 UTC format with a trailing 'Z'.
+
+    Examples:
+        2025-10-29T12:00:00Z
+
+    If dt is None, returns None.
+    """
+
+    if dt is None:
+        return None
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+
+    dt = dt.astimezone(timezone.utc).replace(microsecond=0)
+    return dt.isoformat().replace("+00:00", "Z")
 
 
 def _compute_average_rating(movie: Movie) -> Optional[float]:
@@ -97,13 +117,7 @@ def _movie_to_detail(movie: Movie) -> MovieDetail:
     """
     list_item = _movie_to_list_item(movie)
 
-    updated_at_value: Optional[str] = None
-    # Some specs expect an 'updated_at' field. If the ORM model provides it,
-    # we convert it to string; otherwise we keep it as None.
-    if hasattr(movie, "updated_at"):
-        raw_value = getattr(movie, "updated_at")
-        if raw_value is not None:
-            updated_at_value = str(raw_value)
+    updated_at_value = _to_iso_z(getattr(movie, "updated_at", None))
 
     return MovieDetail(
         **list_item.model_dump(),
@@ -301,11 +315,7 @@ def add_movie_rating(
         score=score,
     )
 
-    created_at_value: Optional[str] = None
-    if hasattr(rating, "created_at"):
-        raw_value = getattr(rating, "created_at")
-        if raw_value is not None:
-            created_at_value = str(raw_value)
+    created_at_value = _to_iso_z(getattr(rating, "created_at", None))
 
     return MovieRatingResponse(
         rating_id=rating.id,
