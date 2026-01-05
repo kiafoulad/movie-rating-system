@@ -5,8 +5,10 @@ from sqlalchemy import (
     ForeignKey,
     Table,
     CheckConstraint,
+    DateTime,
 )
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 
 from app.db.session import Base
 
@@ -80,6 +82,19 @@ class Movie(Base):
     release_year = Column(Integer, nullable=True)
     cast = Column(String, nullable=True)
 
+    # Timestamps (Phase 1 spec)
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
     # Relations
     director = relationship("Director", back_populates="movies")
 
@@ -110,6 +125,13 @@ class MovieRating(Base):
         nullable=False,
     )
     score = Column(Integer, nullable=False)
+
+    # Timestamp (Phase 1 spec)
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
 
     __table_args__ = (
         # Ensure score is always between 1 and 10 at database level
