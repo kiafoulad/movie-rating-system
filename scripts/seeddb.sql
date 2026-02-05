@@ -53,8 +53,8 @@ CREATE TABLE tmdb_credits_raw (
 
 \echo 'Loading raw data from CSV...'
 \echo 'Note: run this script from the scripts/ directory so CSV paths resolve.'
-\copy tmdb_movies_raw (budget, genres, homepage, id, keywords, original_language, original_title, overview, popularity, production_companies, production_countries, release_date, revenue, runtime, spoken_languages, status, tagline, title, vote_average, vote_count) FROM 'tmdb_5000_movies.csv' CSV HEADER;
-\copy tmdb_credits_raw (movie_id, title, "cast", crew) FROM 'tmdb_5000_credits.csv' CSV HEADER;
+\copy tmdb_movies_raw (budget, genres, homepage, id, keywords, original_language, original_title, overview, popularity, production_companies, production_countries, release_date, revenue, runtime, spoken_languages, status, tagline, title, vote_average, vote_count) FROM '/tmp/tmdb_5000_movies.csv' CSV HEADER;
+\copy tmdb_credits_raw (movie_id, title, "cast", crew) FROM '/tmp/tmdb_5000_credits.csv' CSV HEADER;
 
 \echo 'Inserting genres...'
 INSERT INTO genres (name, description)

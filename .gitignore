@@ -5,3 +5,4 @@ __pycache__/
 .alembic/
 .idea/
 .vscode/
+app.log
