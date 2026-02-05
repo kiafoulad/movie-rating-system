@@ -8,7 +8,8 @@ services:
       URL_DATABASE: "postgresql+psycopg2://postgres:123456@db:5432/movie_rating_db"
     depends_on:
       - db
-
+    volumes:
+      - .:/app
   db:
     image: postgres:16
     environment:
